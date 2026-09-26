@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ml">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Floor Mat Controller</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #121212; color: #fff; padding: 20px; }
+    .card { background: #1e1e1e; border-radius: 12px; padding: 20px; max-width: 400px; margin: auto; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+    button { background: #007bff; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-size: 16px; cursor: pointer; margin: 10px 0; width: 100%; }
+    input[type="color"] { width: 100%; height: 50px; border: none; border-radius: 8px; cursor: pointer; background: transparent; }
+    .row { display: flex; justify-content: space-between; align-items: center; margin: 15px 0; }
+    input[type="time"] { padding: 8px; border-radius: 6px; border: 1px solid #444; background: #222; color: #fff; }
+    .switch { position: relative; display: inline-block; width: 50px; height: 26px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #555; transition: .4s; border-radius: 26px; }
+    .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: #28a745; }
+    input:checked + .slider:before { transform: translateX(24px); }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Smart Floor Mat</h2>
+  <button id="btnConnect" onclick="connectBLE()">Connect Bluetooth</button>
+  <p id="status" style="color: #bbb;">Disconnected</p>
+  <hr style="border-color: #333;">
+
+  <!-- LED Color Picker -->
+  <div style="margin: 20px 0;">
+    <label><b>LED Color:</b></label><br><br>
+    <input type="color" id="ledColor" value="#ffb450" onchange="sendColor()">
+  </div>
+
+  <!-- Mat Sensor Toggle -->
+  <div class="row">
+    <span><b>Mat Step Sensor:</b></span>
+    <label class="switch">
+      <input type="checkbox" id="matToggle" checked onchange="toggleMat()">
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <!-- Schedule Time -->
+  <div class="row">
+    <span><b>Light ON Time:</b></span>
+    <input type="time" id="timeOn" value="07:00">
+  </div>
+  <div class="row">
+    <span><b>Light OFF Time:</b></span>
+    <input type="time" id="timeOff" value="07:30">
+  </div>
+  <button style="background: #28a745;" onclick="sendSchedule()">Save Schedule</button>
+</div>
+
+<script>
+  const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+  const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+  let bleChar = null;
+
+  async function connectBLE() {
+    try {
+      document.getElementById('status').innerText = "Connecting...";
+      const device = await navigator.bluetooth.requestDevice({
+        filters: [{ name: "Smart_Mat_Light" }],
+        optionalServices: [SERVICE_UUID]
+      });
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      bleChar = await service.getCharacteristic(CHARACTERISTIC_UUID);
+      document.getElementById('status').innerText = "Connected to Smart Mat!";
+      document.getElementById('status').style.color = "#28a745";
+      syncSystemTime();
+    } catch (err) {
+      document.getElementById('status').innerText = "Connection Failed: " + err;
+      document.getElementById('status').style.color = "#dc3545";
+    }
+  }
+
+  async function sendCommand(cmd) {
+    if (bleChar) {
+      const encoder = new TextEncoder();
+      await bleChar.writeValue(encoder.encode(cmd));
+      console.log("Sent:", cmd);
+    }
+  }
+
+  function syncSystemTime() {
+    const d = new Date();
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    sendCommand(`TIME:${h}:${m}`);
+  }
+
+  function sendColor() {
+    const hex = document.getElementById('ledColor').value;
+    const r = parseInt(hex.substr(1, 2), 16);
+    const g = parseInt(hex.substr(3, 2), 16);
+    const b = parseInt(hex.substr(5, 2), 16);
+    sendCommand(`RGB:${r},${g},${b}`);
+  }
+
+  function toggleMat() {
+    const enabled = document.getElementById('matToggle').checked ? "1" : "0";
+    sendCommand(`MAT_EN:${enabled}`);
+  }
+
+  function sendSchedule() {
+    const onTime = document.getElementById('timeOn').value;
+    const offTime = document.getElementById('timeOff').value;
+    sendCommand(`SCHED:${onTime},${offTime}`);
+    alert("Schedule updated!");
+  }
+</script>
+</body>
+</html>
